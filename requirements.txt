@@ -2,3 +2,4 @@ streamlit
 pillow
 torch
 transformers
+pandas

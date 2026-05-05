@@ -505,18 +505,39 @@ CATEGORY_ICONS = {
 # -----------------------------
 def clip_similarity(image, texts):
     """Return CLIP cosine similarities for image against a list of text prompts."""
-    inputs = processor(text=texts, images=image, return_tensors="pt", padding=True, truncation=True)
+
+    inputs = processor(
+        text=texts,
+        images=image,
+        return_tensors="pt",
+        padding=True,
+        truncation=True
+    )
+
     with torch.no_grad():
-        image_features = model.get_image_features(pixel_values=inputs["pixel_values"])
+        image_features = model.get_image_features(
+            pixel_values=inputs["pixel_values"]
+        )
+
         text_features = model.get_text_features(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"]
         )
 
-    image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-    text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-    similarities = (image_features @ text_features.T)[0]
-    return similarities.cpu().tolist()
+    # Some Streamlit Cloud / package versions can return objects that need to be forced into tensors.
+    if not isinstance(image_features, torch.Tensor):
+        image_features = torch.tensor(image_features)
+
+    if not isinstance(text_features, torch.Tensor):
+        text_features = torch.tensor(text_features)
+
+    # Safe normalization. This avoids the previous AttributeError around .norm().
+    image_features = torch.nn.functional.normalize(image_features, p=2, dim=-1)
+    text_features = torch.nn.functional.normalize(text_features, p=2, dim=-1)
+
+    similarities = torch.matmul(image_features, text_features.T)[0]
+
+    return similarities.detach().cpu().tolist()
 
 
 def normalize_score(similarity, unrelated_baseline):
@@ -841,3 +862,4 @@ if "analysis" in st.session_state:
         )
 
     st.markdown('</div>', unsafe_allow_html=True)
+

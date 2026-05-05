@@ -4,6 +4,23 @@ from transformers import CLIPProcessor, CLIPModel
 import torch
 import pandas as pd
 from datetime import datetime
+from pathlib import Path
+import base64
+
+
+# -----------------------------
+# Local Media Helper
+# -----------------------------
+def get_base64_media(file_path):
+    """
+    Converts a local media file into base64 so it can be used as a CSS background.
+    The GIF file must be in the same folder as leed_website.py.
+    """
+    path = Path(file_path)
+    if path.exists():
+        return base64.b64encode(path.read_bytes()).decode()
+    return None
+
 
 # -----------------------------
 # Page Configuration
@@ -15,186 +32,298 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+
 # -----------------------------
-# Custom CSS
+# Custom CSS — Swiss / International Typographic Style
 # -----------------------------
 st.markdown(
     """
     <style>
         :root {
-            --bg: #f6f7f3;
-            --panel: #ffffff;
-            --ink: #18221b;
-            --muted: #66736a;
-            --green: #315c3d;
-            --sage: #dce8dc;
-            --line: #e5e9e1;
-            --amber: #9a6b1f;
-            --soft-amber: #fff5df;
-            --red: #8a3b32;
-            --soft-red: #fff0ef;
+            --bg: #f2f1ec;
+            --paper: #fdfcf8;
+            --ink: #111111;
+            --muted: #555555;
+            --line: #111111;
+            --soft-line: #d8d6cd;
+            --green: #2f5f3a;
+            --red: #b13a2f;
+            --amber: #a26b00;
+            --blue: #1f4d7a;
+        }
+
+        html, body, [class*="css"] {
+            font-family: Helvetica, Arial, sans-serif;
+            color: var(--ink) !important;
         }
 
         .stApp {
-            background: linear-gradient(135deg, #f6f7f3 0%, #eef4ee 45%, #f9faf7 100%);
+            background: var(--bg) !important;
+            color: var(--ink) !important;
+        }
+
+        section[data-testid="stSidebar"] {
+            background: #e7e5dd !important;
+            border-right: 1.5px solid var(--line);
+        }
+
+        section[data-testid="stSidebar"] * {
+            color: var(--ink) !important;
+        }
+
+        h1, h2, h3, h4, h5, h6, p, span, div, label {
+            color: var(--ink) !important;
         }
 
         .hero {
-            padding: 34px 34px 28px 34px;
-            border-radius: 28px;
-            background: radial-gradient(circle at top left, #dfeee1 0%, #ffffff 46%, #f8fbf7 100%);
-            border: 1px solid var(--line);
-            box-shadow: 0 18px 45px rgba(30, 50, 35, 0.08);
-            margin-bottom: 24px;
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 18px;
+            padding: 34px 0 28px 0;
+            border-bottom: 2px solid var(--line);
+            margin-bottom: 28px;
+            background: transparent;
         }
 
         .eyebrow {
             display: inline-block;
-            padding: 7px 12px;
-            border-radius: 999px;
-            background: #eef6ee;
-            color: var(--green);
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 0.05em;
+            width: fit-content;
+            padding: 0;
+            background: transparent;
+            color: var(--green) !important;
+            font-size: 12px;
+            font-weight: 800;
+            letter-spacing: 0.11em;
             text-transform: uppercase;
-            margin-bottom: 14px;
         }
 
         .hero-title {
-            font-size: 48px;
-            line-height: 1.03;
-            font-weight: 850;
-            letter-spacing: -0.04em;
-            color: var(--ink);
-            margin-bottom: 12px;
+            max-width: 980px;
+            font-size: clamp(46px, 7vw, 94px);
+            line-height: 0.92;
+            font-weight: 900;
+            letter-spacing: -0.065em;
+            color: var(--ink) !important;
+            margin: 0;
         }
 
         .hero-subtitle {
-            max-width: 860px;
-            font-size: 18px;
-            line-height: 1.65;
-            color: var(--muted);
+            max-width: 780px;
+            font-size: 17px;
+            line-height: 1.55;
+            color: var(--muted) !important;
+            border-left: 6px solid var(--green);
+            padding-left: 18px;
         }
 
         .glass-card {
             padding: 24px;
-            border-radius: 24px;
-            background: rgba(255,255,255,0.88);
-            border: 1px solid var(--line);
-            box-shadow: 0 14px 35px rgba(30, 50, 35, 0.07);
+            border-radius: 0;
+            background: rgba(253, 252, 248, 0.94) !important;
+            border: 1.5px solid var(--line);
+            box-shadow: none;
             height: 100%;
+            backdrop-filter: blur(2px);
         }
 
         .result-card {
             padding: 26px;
-            border-radius: 28px;
-            background: #ffffff;
-            border: 1px solid var(--line);
-            box-shadow: 0 16px 42px rgba(30, 50, 35, 0.08);
-            margin-top: 18px;
+            border-radius: 0;
+            background: rgba(253, 252, 248, 0.95) !important;
+            border: 1.5px solid var(--line);
+            box-shadow: none;
+            margin-top: 24px;
+            backdrop-filter: blur(2px);
         }
 
         .result-label {
-            color: var(--muted);
-            font-size: 13px;
-            font-weight: 800;
-            letter-spacing: 0.08em;
+            color: var(--green) !important;
+            font-size: 12px;
+            font-weight: 900;
+            letter-spacing: 0.12em;
             text-transform: uppercase;
-            margin-bottom: 7px;
+            margin-bottom: 9px;
         }
 
         .result-title {
-            font-size: 34px;
-            font-weight: 850;
-            letter-spacing: -0.03em;
-            color: var(--green);
-            margin-bottom: 8px;
+            font-size: clamp(32px, 4vw, 56px);
+            font-weight: 900;
+            letter-spacing: -0.055em;
+            color: var(--ink) !important;
+            margin-bottom: 10px;
+            line-height: 0.98;
         }
 
         .section-title {
-            font-size: 22px;
-            font-weight: 800;
-            letter-spacing: -0.02em;
-            color: var(--ink);
-            margin: 0 0 12px 0;
+            font-size: 24px;
+            font-weight: 900;
+            letter-spacing: -0.04em;
+            color: var(--ink) !important;
+            margin: 0 0 14px 0;
+            border-bottom: 1.5px solid var(--line);
+            padding-bottom: 10px;
         }
 
         .small-muted {
-            color: var(--muted);
+            color: var(--muted) !important;
             font-size: 14px;
             line-height: 1.55;
         }
 
         .pill {
             display: inline-block;
-            padding: 8px 12px;
-            border-radius: 999px;
-            background: #eef6ee;
-            color: #315c3d;
-            border: 1px solid #d9eadb;
-            font-size: 13px;
-            font-weight: 700;
+            padding: 7px 10px;
+            border-radius: 0;
+            background: transparent !important;
+            color: var(--green) !important;
+            border: 1.5px solid var(--green);
+            font-size: 12px;
+            font-weight: 800;
             margin: 4px 6px 4px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
 
         .warn-pill {
             display: inline-block;
-            padding: 8px 12px;
-            border-radius: 999px;
-            background: var(--soft-amber);
-            color: var(--amber);
-            border: 1px solid #f2dfb9;
-            font-size: 13px;
-            font-weight: 700;
+            padding: 7px 10px;
+            border-radius: 0;
+            background: transparent !important;
+            color: var(--amber) !important;
+            border: 1.5px solid var(--amber);
+            font-size: 12px;
+            font-weight: 800;
             margin: 4px 6px 4px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
 
         .bad-pill {
             display: inline-block;
-            padding: 8px 12px;
-            border-radius: 999px;
-            background: var(--soft-red);
-            color: var(--red);
-            border: 1px solid #f0cbc7;
-            font-size: 13px;
-            font-weight: 700;
+            padding: 7px 10px;
+            border-radius: 0;
+            background: transparent !important;
+            color: var(--red) !important;
+            border: 1.5px solid var(--red);
+            font-size: 12px;
+            font-weight: 800;
             margin: 4px 6px 4px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
 
         .divider {
-            height: 1px;
+            height: 1.5px;
             background: var(--line);
-            margin: 20px 0;
+            margin: 22px 0;
         }
 
         div[data-testid="stMetric"] {
-            background: #ffffff;
-            border: 1px solid var(--line);
-            border-radius: 20px;
+            background: rgba(253, 252, 248, 0.95) !important;
+            border: 1.5px solid var(--line);
+            border-radius: 0;
             padding: 16px;
-            box-shadow: 0 10px 24px rgba(30, 50, 35, 0.05);
+            box-shadow: none;
+        }
+
+        div[data-testid="stMetric"] * {
+            color: var(--ink) !important;
         }
 
         .stButton > button {
-            border-radius: 999px;
-            padding: 0.75rem 1.4rem;
-            border: 0;
-            background: #315c3d;
-            color: white;
-            font-weight: 800;
-            box-shadow: 0 12px 25px rgba(49, 92, 61, 0.22);
+            border-radius: 0;
+            padding: 0.82rem 1.45rem;
+            border: 1.5px solid var(--line);
+            background: var(--ink) !important;
+            color: #ffffff !important;
+            font-weight: 900;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            box-shadow: none;
         }
 
         .stButton > button:hover {
-            background: #25472f;
-            color: white;
-            border: 0;
+            background: var(--green) !important;
+            color: #ffffff !important;
+            border: 1.5px solid var(--green);
+        }
+
+        div[data-testid="stAlert"] {
+            border-radius: 0;
+            border: 1.5px solid var(--line);
+            background: #fffdf2 !important;
+            color: var(--ink) !important;
+        }
+
+        div[data-testid="stFileUploader"] {
+            background: rgba(255, 255, 255, 0.94) !important;
+            border: 1.5px dashed var(--line);
+            padding: 12px;
+        }
+
+        div[data-testid="stFileUploader"] * {
+            color: var(--ink) !important;
+        }
+
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 0;
+            border-bottom: 1.5px solid var(--line);
+        }
+
+        .stTabs [data-baseweb="tab"] {
+            border-radius: 0;
+            color: var(--ink) !important;
+            font-weight: 800;
+            border: 1.5px solid var(--line);
+            border-bottom: 0;
+            background: #ebe9df;
+            padding: 10px 14px;
+        }
+
+        .stTabs [aria-selected="true"] {
+            background: var(--paper) !important;
+        }
+
+        .stProgress > div > div > div > div {
+            background-color: var(--green) !important;
+        }
+
+        div[data-testid="stDataFrame"] {
+            border: 1.5px solid var(--line);
+        }
+
+        textarea, input {
+            color: var(--ink) !important;
+            background: #ffffff !important;
         }
     </style>
     """,
     unsafe_allow_html=True
 )
+
+
+# -----------------------------
+# GIF Background
+# -----------------------------
+bg_gif = get_base64_media("leed_motion.gif")
+
+if bg_gif:
+    st.markdown(
+        f"""
+        <style>
+            .stApp {{
+                background:
+                    linear-gradient(rgba(242, 241, 236, 0.45), rgba(242, 241, 236, 0.45)),
+                    url("data:image/gif;base64,{bg_gif}") center center / cover fixed no-repeat !important;
+                color: var(--ink) !important;
+            }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+else:
+    st.warning("Background GIF not found. Make sure leed_motion.gif is in the same folder as leed_website.py.")
+
 
 # -----------------------------
 # Model Loading
@@ -205,15 +334,13 @@ def load_model():
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
     return model, processor
 
+
 model, processor = load_model()
+
 
 # -----------------------------
 # Criteria System
 # -----------------------------
-# The app now scores visible sub-criteria instead of using only one broad category score.
-# This reduces false labels such as giving HVAC points when no mechanical system is visible.
-# It also treats windows carefully: daylight can be positive, but glare risk can reduce the IEQ confidence.
-
 CRITERIA = {
     "Energy and Atmosphere": {
         "Renewable Energy": {
@@ -482,6 +609,7 @@ CRITERIA = {
     }
 }
 
+
 UNRELATED_PROMPTS = [
     "random object with no building feature",
     "food on a table",
@@ -492,6 +620,7 @@ UNRELATED_PROMPTS = [
     "normal building photo with no visible sustainability strategy"
 ]
 
+
 CATEGORY_ICONS = {
     "Energy and Atmosphere": "⚡",
     "Indoor Environmental Quality": "🌤️",
@@ -500,11 +629,16 @@ CATEGORY_ICONS = {
     "Not Clearly LEED Related": "—"
 }
 
+
 # -----------------------------
 # Scoring Helpers
 # -----------------------------
 def clip_similarity(image, texts):
-    """Return CLIP cosine similarities for image against a list of text prompts."""
+    """
+    Return CLIP cosine similarities for image against a list of text prompts.
+    This Streamlit Cloud-safe version uses model(**inputs) and reads
+    outputs.image_embeds / outputs.text_embeds directly.
+    """
 
     inputs = processor(
         text=texts,
@@ -515,23 +649,10 @@ def clip_similarity(image, texts):
     )
 
     with torch.no_grad():
-        image_features = model.get_image_features(
-            pixel_values=inputs["pixel_values"]
-        )
+        outputs = model(**inputs)
+        image_features = outputs.image_embeds
+        text_features = outputs.text_embeds
 
-        text_features = model.get_text_features(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"]
-        )
-
-    # Some Streamlit Cloud / package versions can return objects that need to be forced into tensors.
-    if not isinstance(image_features, torch.Tensor):
-        image_features = torch.tensor(image_features)
-
-    if not isinstance(text_features, torch.Tensor):
-        text_features = torch.tensor(text_features)
-
-    # Safe normalization. This avoids the previous AttributeError around .norm().
     image_features = torch.nn.functional.normalize(image_features, p=2, dim=-1)
     text_features = torch.nn.functional.normalize(text_features, p=2, dim=-1)
 
@@ -546,7 +667,6 @@ def normalize_score(similarity, unrelated_baseline):
     This is intentionally conservative to reduce false positives.
     """
     adjusted = similarity - unrelated_baseline
-    # Typical useful CLIP margin is small. These values are tuned for a conservative visual-evidence app.
     score = (adjusted - 0.015) / 0.095 * 5
     return max(0, min(5, score))
 
@@ -554,7 +674,11 @@ def normalize_score(similarity, unrelated_baseline):
 def analyze_image(image):
     image = image.convert("RGB")
 
-    unrelated_scores = clip_similarity(image, [f"a photo of {p}" for p in UNRELATED_PROMPTS])
+    unrelated_scores = clip_similarity(
+        image,
+        [f"a photo of {p}" for p in UNRELATED_PROMPTS]
+    )
+
     unrelated_baseline = max(unrelated_scores)
 
     category_results = {}
@@ -569,6 +693,7 @@ def analyze_image(image):
         for criterion_name, data in criteria.items():
             positive_prompts = [f"a photo showing {p}" for p in data["positive"]]
             positive_scores = clip_similarity(image, positive_prompts)
+
             best_pos_score = max(positive_scores)
             best_pos_prompt = data["positive"][positive_scores.index(best_pos_score)]
 
@@ -576,18 +701,18 @@ def analyze_image(image):
 
             negative_rating = 0
             best_neg_prompt = None
+
             if data.get("negative"):
                 negative_prompts = [f"a photo showing {p}" for p in data["negative"]]
                 negative_scores = clip_similarity(image, negative_prompts)
+
                 best_neg_score = max(negative_scores)
                 best_neg_prompt = data["negative"][negative_scores.index(best_neg_score)]
+
                 negative_rating = normalize_score(best_neg_score, unrelated_baseline)
 
-            # Penalize the criterion when a visible contradiction or risk appears.
-            # Example: windows + harsh glare should not become a perfect IEQ daylight score.
             final_rating = max(0, positive_rating - (0.45 * negative_rating))
 
-            # Make weak evidence count less strongly.
             if final_rating < 1.15:
                 final_rating = 0
 
@@ -595,6 +720,7 @@ def analyze_image(image):
             weight_sum += data["weight"]
 
             status = "Not detected"
+
             if final_rating >= 3.5:
                 status = "Strong visual evidence"
             elif final_rating >= 2.3:
@@ -603,6 +729,7 @@ def analyze_image(image):
                 status = "Weak visual evidence"
 
             warning = None
+
             if negative_rating >= 2.4:
                 warning = best_neg_prompt
                 all_warnings.append({
@@ -620,12 +747,14 @@ def analyze_image(image):
                 "Best visual match": best_pos_prompt,
                 "Visual caution": warning or "—"
             }
+
             criterion_rows.append(row)
 
             if final_rating >= 2.3:
                 all_detected.append(row)
 
         category_score = weighted_total / weight_sum if weight_sum else 0
+
         category_results[category] = {
             "score": round(category_score, 2),
             "criteria": criterion_rows
@@ -640,7 +769,6 @@ def analyze_image(image):
     top_category, top_score = sorted_categories[0]
     second_category, second_score = sorted_categories[1]
 
-    # Conservative final decision.
     if top_score < 2.0:
         final_result = "Not Clearly LEED Related"
     elif abs(top_score - second_score) <= 0.45 and second_score >= 1.8:
@@ -664,18 +792,40 @@ def analyze_image(image):
 
 def explanation_for_result(result, analysis):
     if result == "Energy and Atmosphere":
-        return "The image has visible evidence linked to energy reduction, passive solar control, renewable energy, efficient lighting, envelope performance, metering, or clearly visible mechanical systems."
+        return (
+            "The image has visible evidence linked to energy reduction, passive solar control, "
+            "renewable energy, efficient lighting, envelope performance, metering, or clearly visible "
+            "mechanical systems."
+        )
+
     if result == "Indoor Environmental Quality":
-        return "The image has visible evidence linked to occupant comfort, daylight quality, views, ventilation, air quality, thermal comfort, lighting comfort, or acoustics. Window evidence is treated carefully because uncontrolled glare can reduce the IEQ score."
+        return (
+            "The image has visible evidence linked to occupant comfort, daylight quality, views, "
+            "ventilation, air quality, thermal comfort, lighting comfort, or acoustics. Window evidence "
+            "is treated carefully because uncontrolled glare can reduce the IEQ score."
+        )
+
     if result == "Location and Transportation":
-        return "The image has visible evidence linked to walkability, public transit access, bicycle facilities, reduced parking, EV charging, or compact mixed-use context."
+        return (
+            "The image has visible evidence linked to walkability, public transit access, bicycle facilities, "
+            "reduced parking, EV charging, or compact mixed-use context."
+        )
+
     if result == "Mixed LEED Evidence":
-        return f"The image appears to support more than one LEED category. The closest categories are {analysis['top_category']} and {analysis['second_category']}."
-    return "The image does not show enough clear visible evidence to confidently connect it to the selected LEED categories."
+        return (
+            f"The image appears to support more than one LEED category. The closest categories are "
+            f"{analysis['top_category']} and {analysis['second_category']}."
+        )
+
+    return (
+        "The image does not show enough clear visible evidence to confidently connect it to the selected "
+        "LEED categories."
+    )
 
 
 def build_report_text(analysis):
     lines = []
+
     lines.append("LEED Visual Evidence Classifier Report")
     lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     lines.append("")
@@ -683,40 +833,69 @@ def build_report_text(analysis):
     lines.append(f"Top category: {analysis['top_category']} ({analysis['top_score']}/5)")
     lines.append(f"Second category: {analysis['second_category']} ({analysis['second_score']}/5)")
     lines.append("")
+
     lines.append("Category scores:")
+
     for cat, score in analysis["sorted_categories"]:
         lines.append(f"- {cat}: {score}/5")
+
     lines.append("")
     lines.append("Detected visual evidence:")
+
     if analysis["detected"]:
         for item in analysis["detected"]:
-            lines.append(f"- {item['Category']} / {item['Criterion']}: {item['Score']}/5 — {item['Best visual match']}")
+            lines.append(
+                f"- {item['Category']} / {item['Criterion']}: "
+                f"{item['Score']}/5 — {item['Best visual match']}"
+            )
     else:
         lines.append("- No strong visual evidence detected.")
+
     lines.append("")
     lines.append("Cautions:")
+
     if analysis["warnings"]:
         for item in analysis["warnings"]:
-            lines.append(f"- {item['Category']} / {item['Issue']}: {item['Visual caution']}")
+            lines.append(
+                f"- {item['Category']} / {item['Issue']}: "
+                f"{item['Visual caution']}"
+            )
     else:
         lines.append("- No major visual cautions detected.")
+
     lines.append("")
-    lines.append("Limitations: This is a visual evidence tool only. It does not prove official LEED compliance, which requires documentation, calculations, drawings, product data, and verification.")
+    lines.append(
+        "Limitations: This is a visual evidence tool only. It does not prove official LEED compliance, "
+        "which requires documentation, calculations, drawings, product data, and verification."
+    )
+
     return "\n".join(lines)
+
 
 # -----------------------------
 # Sidebar
 # -----------------------------
 with st.sidebar:
     st.markdown("### 🌿 LEED Visual Tool")
-    st.write("Upload a building-related image and evaluate it as visual evidence for selected LEED BD+C categories.")
+    st.write(
+        "Upload a building-related image and evaluate it as visual evidence "
+        "for selected LEED BD+C categories."
+    )
+
     st.markdown("---")
+
     st.markdown("**Categories**")
     st.markdown("- ⚡ Energy and Atmosphere")
     st.markdown("- 🌤️ Indoor Environmental Quality")
     st.markdown("- 🚲 Location and Transportation")
+
     st.markdown("---")
-    st.caption("This app is intentionally conservative. It avoids giving full credit for vague images, generic windows, or invisible systems.")
+
+    st.caption(
+        "This app is intentionally conservative. It avoids giving full credit for vague images, "
+        "generic windows, or invisible systems."
+    )
+
 
 # -----------------------------
 # Header
@@ -727,44 +906,76 @@ st.markdown(
         <div class="eyebrow">AI image analysis · LEED visual evidence</div>
         <div class="hero-title">LEED Visual Evidence Classifier</div>
         <div class="hero-subtitle">
-            A sleek image-based tool that rates visible sustainability strategies under selected LEED BD+C categories. 
-            It does not certify LEED compliance — it organizes visual evidence and flags uncertainty, glare risk, and weak evidence.
+            An image-based tool that rates visible sustainability strategies under selected
+            LEED BD+C categories. It does not certify LEED compliance — it organizes visual evidence
+            and flags uncertainty in image, and weak evidence.
         </div>
     </div>
     """,
     unsafe_allow_html=True
 )
 
+
 # -----------------------------
 # Main Layout
 # -----------------------------
 left_col, right_col = st.columns([0.95, 1.25], gap="large")
 
+
 with left_col:
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+
     st.markdown('<div class="section-title">Upload Image</div>', unsafe_allow_html=True)
-    st.markdown('<div class="small-muted">Use a clear photo of a building, interior, facade, street edge, site, system, or detail.</div>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("Choose a JPG or PNG image", type=["jpg", "jpeg", "png"])
+
+    st.markdown(
+        '<div class="small-muted">'
+        'Use a clear photo of a building, interior, facade, street edge, site, system, or detail.'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+    uploaded_file = st.file_uploader(
+        "Choose a JPG or PNG image",
+        type=["jpg", "jpeg", "png"]
+    )
 
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-title">Improved logic</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="section-title">Improved Logic</div>', unsafe_allow_html=True)
+
     st.markdown('<span class="pill">Sub-criteria scoring</span>', unsafe_allow_html=True)
     st.markdown('<span class="pill">Glare penalty</span>', unsafe_allow_html=True)
     st.markdown('<span class="pill">Conservative HVAC detection</span>', unsafe_allow_html=True)
     st.markdown('<span class="pill">Visible evidence only</span>', unsafe_allow_html=True)
 
-    st.info("Tip: A normal window is not automatically a strong IEQ score. The app checks for daylight quality and also looks for glare risk.")
+    st.info(
+        "Tip: A normal window is not automatically a strong IEQ score. "
+        "The app checks for daylight quality and also looks for glare risk."
+    )
+
     st.markdown('</div>', unsafe_allow_html=True)
+
 
 with right_col:
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+
     if uploaded_file is None:
         st.markdown('<div class="section-title">Preview</div>', unsafe_allow_html=True)
         st.warning("Upload an image to start the analysis.")
+
     else:
         image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded image", width="stretch")
-        analyze_button = st.button("Analyze Image", use_container_width=True)
+
+        st.image(
+            image,
+            caption="Uploaded image",
+            width="stretch"
+        )
+
+        analyze_button = st.button(
+            "Analyze Image",
+            use_container_width=True
+        )
 
         if analyze_button:
             with st.spinner("Analyzing visible LEED evidence..."):
@@ -772,6 +983,7 @@ with right_col:
                 st.session_state["analysis"] = analysis
 
     st.markdown('</div>', unsafe_allow_html=True)
+
 
 # -----------------------------
 # Results
@@ -781,69 +993,98 @@ if "analysis" in st.session_state:
     final_result = analysis["final_result"]
 
     st.markdown('<div class="result-card">', unsafe_allow_html=True)
+
     st.markdown('<div class="result-label">Final result</div>', unsafe_allow_html=True)
+
     st.markdown(
         f'<div class="result-title">{CATEGORY_ICONS.get(final_result, "")} {final_result}</div>',
         unsafe_allow_html=True
     )
+
     st.write(explanation_for_result(final_result, analysis))
 
     score_cols = st.columns(3)
+
     for i, (cat, score) in enumerate(analysis["sorted_categories"]):
         with score_cols[i]:
-            st.metric(label=f"{CATEGORY_ICONS.get(cat, '')} {cat}", value=f"{score}/5")
+            st.metric(
+                label=f"{CATEGORY_ICONS.get(cat, '')} {cat}",
+                value=f"{score}/5"
+            )
 
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-    tabs = st.tabs(["Score Breakdown", "Detected Evidence", "Cautions", "Limitations", "Download Report"])
+    tabs = st.tabs([
+        "Score Breakdown",
+        "Detected Evidence",
+        "Cautions",
+        "Limitations",
+        "Download Report"
+    ])
 
     with tabs[0]:
         st.markdown("### Category score bars")
+
         for cat, score in analysis["sorted_categories"]:
             st.write(f"**{CATEGORY_ICONS.get(cat, '')} {cat}: {score}/5**")
             st.progress(min(score / 5, 1.0))
 
         st.markdown("### Detailed criteria table")
+
         rows = []
+
         for cat, data in analysis["category_results"].items():
             rows.extend(data["criteria"])
+
         df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, hide_index=True)
+
+        st.dataframe(
+            df,
+            use_container_width=True,
+            hide_index=True
+        )
 
     with tabs[1]:
         st.markdown("### Visible evidence detected")
+
         if analysis["detected"]:
             for item in sorted(analysis["detected"], key=lambda x: x["Score"], reverse=True):
                 st.markdown(
                     f'<span class="pill">{item["Category"]} · {item["Criterion"]} · {item["Score"]}/5</span>',
                     unsafe_allow_html=True
                 )
+
                 st.write(f"Best visual match: {item['Best visual match']}")
         else:
             st.write("No moderate or strong visual evidence was detected.")
 
     with tabs[2]:
         st.markdown("### Visual cautions")
+
         if analysis["warnings"]:
             for item in analysis["warnings"]:
                 st.markdown(
                     f'<span class="warn-pill">{item["Category"]} · {item["Issue"]}</span>',
                     unsafe_allow_html=True
                 )
+
                 st.write(f"Caution: {item['Visual caution']}")
         else:
             st.success("No major visual cautions detected.")
 
     with tabs[3]:
         st.markdown("### What this tool can and cannot do")
+
         st.markdown(
             """
             **This tool can:**
+
             - Sort a photo under likely LEED-related visual categories.
             - Identify visible evidence such as solar panels, shading devices, bike racks, daylight, acoustic panels, or EV charging.
             - Flag risks such as glare or car-dominated site conditions.
 
             **This tool cannot:**
+
             - Prove official LEED compliance.
             - Confirm energy performance, HVAC efficiency, refrigerant management, daylight calculations, acoustic performance, or transit service frequency from an image alone.
             - Replace drawings, specifications, calculations, product data, or LEED documentation.
@@ -852,7 +1093,13 @@ if "analysis" in st.session_state:
 
     with tabs[4]:
         report_text = build_report_text(analysis)
-        st.text_area("Report preview", report_text, height=300)
+
+        st.text_area(
+            "Report preview",
+            report_text,
+            height=300
+        )
+
         st.download_button(
             label="Download report as TXT",
             data=report_text,
@@ -862,4 +1109,3 @@ if "analysis" in st.session_state:
         )
 
     st.markdown('</div>', unsafe_allow_html=True)
-

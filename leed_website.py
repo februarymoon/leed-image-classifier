@@ -7,7 +7,6 @@ from datetime import datetime
 from pathlib import Path
 import base64
 
-
 # -----------------------------
 # Local Media Helper
 # -----------------------------
@@ -21,7 +20,6 @@ def get_base64_media(file_path):
         return base64.b64encode(path.read_bytes()).decode()
     return None
 
-
 # -----------------------------
 # Page Configuration
 # -----------------------------
@@ -31,7 +29,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
 
 # -----------------------------
 # Custom CSS — Swiss / International Typographic Style
@@ -301,19 +298,15 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-
-# -----------------------------
-# GIF Background
-# -----------------------------
+# GIF background overlay
 bg_gif = get_base64_media("leed_motion.gif")
-
 if bg_gif:
     st.markdown(
         f"""
         <style>
             .stApp {{
                 background:
-                    linear-gradient(rgba(242, 241, 236, 0.45), rgba(242, 241, 236, 0.45)),
+                    linear-gradient(rgba(242, 241, 236, 0.86), rgba(242, 241, 236, 0.86)),
                     url("data:image/gif;base64,{bg_gif}") center center / cover fixed no-repeat !important;
                 color: var(--ink) !important;
             }}
@@ -324,7 +317,6 @@ if bg_gif:
 else:
     st.warning("Background GIF not found. Make sure leed_motion.gif is in the same folder as leed_website.py.")
 
-
 # -----------------------------
 # Model Loading
 # -----------------------------
@@ -334,13 +326,15 @@ def load_model():
     processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
     return model, processor
 
-
 model, processor = load_model()
-
 
 # -----------------------------
 # Criteria System
 # -----------------------------
+# The app now scores visible sub-criteria instead of using only one broad category score.
+# This reduces false labels such as giving HVAC points when no mechanical system is visible.
+# It also treats windows carefully: daylight can be positive, but glare risk can reduce the IEQ confidence.
+
 CRITERIA = {
     "Energy and Atmosphere": {
         "Renewable Energy": {
@@ -609,7 +603,6 @@ CRITERIA = {
     }
 }
 
-
 UNRELATED_PROMPTS = [
     "random object with no building feature",
     "food on a table",
@@ -620,7 +613,6 @@ UNRELATED_PROMPTS = [
     "normal building photo with no visible sustainability strategy"
 ]
 
-
 CATEGORY_ICONS = {
     "Energy and Atmosphere": "⚡",
     "Indoor Environmental Quality": "🌤️",
@@ -628,7 +620,6 @@ CATEGORY_ICONS = {
     "Mixed LEED Evidence": "🔀",
     "Not Clearly LEED Related": "—"
 }
-
 
 # -----------------------------
 # Scoring Helpers
@@ -664,21 +655,23 @@ def clip_similarity(image, texts):
 def normalize_score(similarity, unrelated_baseline):
     """
     Convert CLIP similarity into a 0-5 visual evidence score.
-    This is intentionally conservative to reduce false positives.
+    This version is more balanced and less strict than the previous one.
+    It still avoids obvious false positives, but it allows moderate LEED evidence
+    to be recognized instead of constantly returning 'Not Clearly LEED Related'.
     """
-    adjusted = similarity - unrelated_baseline
-    score = (adjusted - 0.015) / 0.095 * 5
+    # Do not fully subtract the unrelated baseline, because that made the app too strict.
+    adjusted = similarity - (0.65 * unrelated_baseline)
+
+    # Softer threshold curve.
+    score = (adjusted - 0.005) / 0.075 * 5
+
     return max(0, min(5, score))
 
 
 def analyze_image(image):
     image = image.convert("RGB")
 
-    unrelated_scores = clip_similarity(
-        image,
-        [f"a photo of {p}" for p in UNRELATED_PROMPTS]
-    )
-
+    unrelated_scores = clip_similarity(image, [f"a photo of {p}" for p in UNRELATED_PROMPTS])
     unrelated_baseline = max(unrelated_scores)
 
     category_results = {}
@@ -693,7 +686,6 @@ def analyze_image(image):
         for criterion_name, data in criteria.items():
             positive_prompts = [f"a photo showing {p}" for p in data["positive"]]
             positive_scores = clip_similarity(image, positive_prompts)
-
             best_pos_score = max(positive_scores)
             best_pos_prompt = data["positive"][positive_scores.index(best_pos_score)]
 
@@ -701,36 +693,34 @@ def analyze_image(image):
 
             negative_rating = 0
             best_neg_prompt = None
-
             if data.get("negative"):
                 negative_prompts = [f"a photo showing {p}" for p in data["negative"]]
                 negative_scores = clip_similarity(image, negative_prompts)
-
                 best_neg_score = max(negative_scores)
                 best_neg_prompt = data["negative"][negative_scores.index(best_neg_score)]
-
                 negative_rating = normalize_score(best_neg_score, unrelated_baseline)
 
-            final_rating = max(0, positive_rating - (0.45 * negative_rating))
+            # Penalize the criterion when a visible contradiction or risk appears.
+            # Example: windows + harsh glare should not become a perfect IEQ daylight score.
+            final_rating = max(0, positive_rating - (0.28 * negative_rating))
 
-            if final_rating < 1.15:
+            # Make weak evidence count less strongly.
+            if final_rating < 0.55:
                 final_rating = 0
 
             weighted_total += final_rating * data["weight"]
             weight_sum += data["weight"]
 
             status = "Not detected"
-
             if final_rating >= 3.5:
                 status = "Strong visual evidence"
-            elif final_rating >= 2.3:
+            elif final_rating >= 1.9:
                 status = "Moderate visual evidence"
-            elif final_rating >= 1.15:
+            elif final_rating >= 0.55:
                 status = "Weak visual evidence"
 
             warning = None
-
-            if negative_rating >= 2.4:
+            if negative_rating >= 3.1:
                 warning = best_neg_prompt
                 all_warnings.append({
                     "Category": category,
@@ -747,14 +737,12 @@ def analyze_image(image):
                 "Best visual match": best_pos_prompt,
                 "Visual caution": warning or "—"
             }
-
             criterion_rows.append(row)
 
-            if final_rating >= 2.3:
+            if final_rating >= 1.6:
                 all_detected.append(row)
 
         category_score = weighted_total / weight_sum if weight_sum else 0
-
         category_results[category] = {
             "score": round(category_score, 2),
             "criteria": criterion_rows
@@ -769,9 +757,10 @@ def analyze_image(image):
     top_category, top_score = sorted_categories[0]
     second_category, second_score = sorted_categories[1]
 
-    if top_score < 2.0:
+    # Conservative final decision.
+    if top_score < 1.15:
         final_result = "Not Clearly LEED Related"
-    elif abs(top_score - second_score) <= 0.45 and second_score >= 1.8:
+    elif abs(top_score - second_score) <= 0.60 and second_score >= 1.20:
         final_result = "Mixed LEED Evidence"
     else:
         final_result = top_category
@@ -792,40 +781,18 @@ def analyze_image(image):
 
 def explanation_for_result(result, analysis):
     if result == "Energy and Atmosphere":
-        return (
-            "The image has visible evidence linked to energy reduction, passive solar control, "
-            "renewable energy, efficient lighting, envelope performance, metering, or clearly visible "
-            "mechanical systems."
-        )
-
+        return "The image has visible evidence linked to energy reduction, passive solar control, renewable energy, efficient lighting, envelope performance, metering, or clearly visible mechanical systems."
     if result == "Indoor Environmental Quality":
-        return (
-            "The image has visible evidence linked to occupant comfort, daylight quality, views, "
-            "ventilation, air quality, thermal comfort, lighting comfort, or acoustics. Window evidence "
-            "is treated carefully because uncontrolled glare can reduce the IEQ score."
-        )
-
+        return "The image has visible evidence linked to occupant comfort, daylight quality, views, ventilation, air quality, thermal comfort, lighting comfort, or acoustics. Window evidence is treated carefully because uncontrolled glare can reduce the IEQ score."
     if result == "Location and Transportation":
-        return (
-            "The image has visible evidence linked to walkability, public transit access, bicycle facilities, "
-            "reduced parking, EV charging, or compact mixed-use context."
-        )
-
+        return "The image has visible evidence linked to walkability, public transit access, bicycle facilities, reduced parking, EV charging, or compact mixed-use context."
     if result == "Mixed LEED Evidence":
-        return (
-            f"The image appears to support more than one LEED category. The closest categories are "
-            f"{analysis['top_category']} and {analysis['second_category']}."
-        )
-
-    return (
-        "The image does not show enough clear visible evidence to confidently connect it to the selected "
-        "LEED categories."
-    )
+        return f"The image appears to support more than one LEED category. The closest categories are {analysis['top_category']} and {analysis['second_category']}."
+    return "The image does not show enough clear visible evidence to confidently connect it to the selected LEED categories."
 
 
 def build_report_text(analysis):
     lines = []
-
     lines.append("LEED Visual Evidence Classifier Report")
     lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
     lines.append("")
@@ -833,69 +800,40 @@ def build_report_text(analysis):
     lines.append(f"Top category: {analysis['top_category']} ({analysis['top_score']}/5)")
     lines.append(f"Second category: {analysis['second_category']} ({analysis['second_score']}/5)")
     lines.append("")
-
     lines.append("Category scores:")
-
     for cat, score in analysis["sorted_categories"]:
         lines.append(f"- {cat}: {score}/5")
-
     lines.append("")
     lines.append("Detected visual evidence:")
-
     if analysis["detected"]:
         for item in analysis["detected"]:
-            lines.append(
-                f"- {item['Category']} / {item['Criterion']}: "
-                f"{item['Score']}/5 — {item['Best visual match']}"
-            )
+            lines.append(f"- {item['Category']} / {item['Criterion']}: {item['Score']}/5 — {item['Best visual match']}")
     else:
         lines.append("- No strong visual evidence detected.")
-
     lines.append("")
     lines.append("Cautions:")
-
     if analysis["warnings"]:
         for item in analysis["warnings"]:
-            lines.append(
-                f"- {item['Category']} / {item['Issue']}: "
-                f"{item['Visual caution']}"
-            )
+            lines.append(f"- {item['Category']} / {item['Issue']}: {item['Visual caution']}")
     else:
         lines.append("- No major visual cautions detected.")
-
     lines.append("")
-    lines.append(
-        "Limitations: This is a visual evidence tool only. It does not prove official LEED compliance, "
-        "which requires documentation, calculations, drawings, product data, and verification."
-    )
-
+    lines.append("Limitations: This is a visual evidence tool only. It does not prove official LEED compliance, which requires documentation, calculations, drawings, product data, and verification.")
     return "\n".join(lines)
-
 
 # -----------------------------
 # Sidebar
 # -----------------------------
 with st.sidebar:
     st.markdown("### 🌿 LEED Visual Tool")
-    st.write(
-        "Upload a building-related image and evaluate it as visual evidence "
-        "for selected LEED BD+C categories."
-    )
-
+    st.write("Upload a building-related image and evaluate it as visual evidence for selected LEED BD+C categories.")
     st.markdown("---")
-
     st.markdown("**Categories**")
     st.markdown("- ⚡ Energy and Atmosphere")
     st.markdown("- 🌤️ Indoor Environmental Quality")
     st.markdown("- 🚲 Location and Transportation")
-
     st.markdown("---")
-
-    st.caption(
-        "This app is intentionally conservative. It avoids giving full credit for vague images, "
-        "generic windows, or invisible systems."
-    )
-
+    st.caption("This app is intentionally conservative. It avoids giving full credit for vague images, generic windows, or invisible systems.")
 
 # -----------------------------
 # Header
@@ -906,76 +844,43 @@ st.markdown(
         <div class="eyebrow">AI image analysis · LEED visual evidence</div>
         <div class="hero-title">LEED Visual Evidence Classifier</div>
         <div class="hero-subtitle">
-            An image-based tool that rates visible sustainability strategies under selected
-            LEED BD+C categories. It does not certify LEED compliance — it organizes visual evidence
-            and flags uncertainty in image, and weak evidence.
+            A sleek image-based tool that rates visible sustainability strategies under selected LEED BD+C categories. 
+            It does not certify LEED compliance — it organizes visual evidence and flags uncertainty, glare risk, and weak evidence.
         </div>
     </div>
     """,
     unsafe_allow_html=True
 )
 
-
 # -----------------------------
 # Main Layout
 # -----------------------------
 left_col, right_col = st.columns([0.95, 1.25], gap="large")
 
-
 with left_col:
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-
     st.markdown('<div class="section-title">Upload Image</div>', unsafe_allow_html=True)
-
-    st.markdown(
-        '<div class="small-muted">'
-        'Use a clear photo of a building, interior, facade, street edge, site, system, or detail.'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-    uploaded_file = st.file_uploader(
-        "Choose a JPG or PNG image",
-        type=["jpg", "jpeg", "png"]
-    )
-
+    st.markdown('<div class="small-muted">Use a clear photo of a building, interior, facade, street edge, site, system, or detail.</div>', unsafe_allow_html=True)
+    uploaded_file = st.file_uploader("Choose a JPG or PNG image", type=["jpg", "jpeg", "png"])
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="section-title">Improved Logic</div>', unsafe_allow_html=True)
-
+    st.markdown('<div class="section-title">Improved logic</div>', unsafe_allow_html=True)
     st.markdown('<span class="pill">Sub-criteria scoring</span>', unsafe_allow_html=True)
     st.markdown('<span class="pill">Glare penalty</span>', unsafe_allow_html=True)
     st.markdown('<span class="pill">Conservative HVAC detection</span>', unsafe_allow_html=True)
     st.markdown('<span class="pill">Visible evidence only</span>', unsafe_allow_html=True)
 
-    st.info(
-        "Tip: A normal window is not automatically a strong IEQ score. "
-        "The app checks for daylight quality and also looks for glare risk."
-    )
-
+    st.info("Tip: A normal window is not automatically a strong IEQ score. The app checks for daylight quality and also looks for glare risk.")
     st.markdown('</div>', unsafe_allow_html=True)
-
 
 with right_col:
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-
     if uploaded_file is None:
         st.markdown('<div class="section-title">Preview</div>', unsafe_allow_html=True)
         st.warning("Upload an image to start the analysis.")
-
     else:
         image = Image.open(uploaded_file)
-
-        st.image(
-            image,
-            caption="Uploaded image",
-            width="stretch"
-        )
-
-        analyze_button = st.button(
-            "Analyze Image",
-            use_container_width=True
-        )
+        st.image(image, caption="Uploaded image", width="stretch")
+        analyze_button = st.button("Analyze Image", use_container_width=True)
 
         if analyze_button:
             with st.spinner("Analyzing visible LEED evidence..."):
@@ -983,7 +888,6 @@ with right_col:
                 st.session_state["analysis"] = analysis
 
     st.markdown('</div>', unsafe_allow_html=True)
-
 
 # -----------------------------
 # Results
@@ -993,98 +897,69 @@ if "analysis" in st.session_state:
     final_result = analysis["final_result"]
 
     st.markdown('<div class="result-card">', unsafe_allow_html=True)
-
     st.markdown('<div class="result-label">Final result</div>', unsafe_allow_html=True)
-
     st.markdown(
         f'<div class="result-title">{CATEGORY_ICONS.get(final_result, "")} {final_result}</div>',
         unsafe_allow_html=True
     )
-
     st.write(explanation_for_result(final_result, analysis))
 
     score_cols = st.columns(3)
-
     for i, (cat, score) in enumerate(analysis["sorted_categories"]):
         with score_cols[i]:
-            st.metric(
-                label=f"{CATEGORY_ICONS.get(cat, '')} {cat}",
-                value=f"{score}/5"
-            )
+            st.metric(label=f"{CATEGORY_ICONS.get(cat, '')} {cat}", value=f"{score}/5")
 
     st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
 
-    tabs = st.tabs([
-        "Score Breakdown",
-        "Detected Evidence",
-        "Cautions",
-        "Limitations",
-        "Download Report"
-    ])
+    tabs = st.tabs(["Score Breakdown", "Detected Evidence", "Cautions", "Limitations", "Download Report"])
 
     with tabs[0]:
         st.markdown("### Category score bars")
-
         for cat, score in analysis["sorted_categories"]:
             st.write(f"**{CATEGORY_ICONS.get(cat, '')} {cat}: {score}/5**")
             st.progress(min(score / 5, 1.0))
 
         st.markdown("### Detailed criteria table")
-
         rows = []
-
         for cat, data in analysis["category_results"].items():
             rows.extend(data["criteria"])
-
         df = pd.DataFrame(rows)
-
-        st.dataframe(
-            df,
-            use_container_width=True,
-            hide_index=True
-        )
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
     with tabs[1]:
         st.markdown("### Visible evidence detected")
-
         if analysis["detected"]:
             for item in sorted(analysis["detected"], key=lambda x: x["Score"], reverse=True):
                 st.markdown(
                     f'<span class="pill">{item["Category"]} · {item["Criterion"]} · {item["Score"]}/5</span>',
                     unsafe_allow_html=True
                 )
-
                 st.write(f"Best visual match: {item['Best visual match']}")
         else:
             st.write("No moderate or strong visual evidence was detected.")
 
     with tabs[2]:
         st.markdown("### Visual cautions")
-
         if analysis["warnings"]:
             for item in analysis["warnings"]:
                 st.markdown(
                     f'<span class="warn-pill">{item["Category"]} · {item["Issue"]}</span>',
                     unsafe_allow_html=True
                 )
-
                 st.write(f"Caution: {item['Visual caution']}")
         else:
             st.success("No major visual cautions detected.")
 
     with tabs[3]:
         st.markdown("### What this tool can and cannot do")
-
         st.markdown(
             """
             **This tool can:**
-
             - Sort a photo under likely LEED-related visual categories.
             - Identify visible evidence such as solar panels, shading devices, bike racks, daylight, acoustic panels, or EV charging.
             - Flag risks such as glare or car-dominated site conditions.
 
             **This tool cannot:**
-
             - Prove official LEED compliance.
             - Confirm energy performance, HVAC efficiency, refrigerant management, daylight calculations, acoustic performance, or transit service frequency from an image alone.
             - Replace drawings, specifications, calculations, product data, or LEED documentation.
@@ -1093,13 +968,7 @@ if "analysis" in st.session_state:
 
     with tabs[4]:
         report_text = build_report_text(analysis)
-
-        st.text_area(
-            "Report preview",
-            report_text,
-            height=300
-        )
-
+        st.text_area("Report preview", report_text, height=300)
         st.download_button(
             label="Download report as TXT",
             data=report_text,
